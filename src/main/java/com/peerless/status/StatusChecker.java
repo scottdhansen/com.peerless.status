@@ -12,6 +12,7 @@ import java.net.SocketException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -70,7 +71,7 @@ public final class StatusChecker implements Runnable {
 				}
 			}
 		}
-		new StatusChecker(files.toArray(new String[] {}), Integer.valueOf(cl.getOptionValue("timeout", Integer.toString(DEFAULT_TIMEOUT))), Integer.valueOf(cl.getOptionValue("retries", Integer.toString(DEFAULT_MAX_RETRIES))), Integer.valueOf(cl.getOptionValue("threads", Integer.toString(DEFAULT_THREADS))), cl.hasOption("verbose"), cl.hasOption("list")).run();
+		new StatusChecker(files.toArray(new String[] {}), Integer.valueOf(cl.getOptionValue("timeout", Integer.toString(DEFAULT_TIMEOUT))), Integer.valueOf(cl.getOptionValue("retries", Integer.toString(DEFAULT_MAX_RETRIES))), Integer.valueOf(cl.getOptionValue("threads", Integer.toString(DEFAULT_THREADS))), cl.hasOption("decode"), cl.hasOption("verbose"), cl.hasOption("list")).run();
 	}
 	static private final Pattern PIPE_FILE_PATTERN = Pattern.compile("^(.+)\\|(.+)\\|(.+)\\|$");
 	static public final String DEFAULT_PIPE_FILE_NAME = "CAXY_MEDIA_DOC.PIPE";
@@ -84,6 +85,7 @@ public final class StatusChecker implements Runnable {
 		OPTIONS.addOption(new Option("t", "timeout", true, "The time in seconds before execution times out. (Defaults to 300.)"));
 		OPTIONS.addOption(new Option("r", "retries", true, "The number of failed retries before a request is discarded. (Defaults to 3.)"));
 		OPTIONS.addOption(new Option("p", "threads", true, "The number of threads to create. Set to 0 to use the automatic thread pool. (Defaults to 50.)"));
+		OPTIONS.addOption(new Option("d", "decode", false, "Decodes percent-encoded paths in output."));
 		OPTIONS.addOption(new Option("v", "verbose", false, "Prints detailed information on requests."));
 		OPTIONS.addOption(new Option("l", "list", false, "Prints all results regardless of status."));
 		OPTIONS.addOption(new Option("h", "help", false, "Prints this message."));
@@ -92,6 +94,7 @@ public final class StatusChecker implements Runnable {
 	private final int timeout;
 	private final int maxRetries;
 	private final int threads;
+	private final boolean decode;
 	private final boolean verbose;
 	private final boolean list;
 	private volatile int successes = 0;
@@ -100,11 +103,12 @@ public final class StatusChecker implements Runnable {
 	private volatile int requestTotal = 0;
 	private volatile int successRetries = 0;
 	private volatile int failureRetries = 0;
-	public StatusChecker(final String[] files, final int timeout, final int maxRetries, final int threads, final boolean verbose, final boolean list) {
+	public StatusChecker(final String[] files, final int timeout, final int maxRetries, final int threads, final boolean decode, final boolean verbose, final boolean list) {
 		this.files = files;
 		this.timeout = timeout;
 		this.maxRetries = maxRetries;
 		this.threads = threads;
+		this.decode = decode;
 		this.verbose = verbose;
 		this.list = list;
 	}
@@ -125,9 +129,9 @@ public final class StatusChecker implements Runnable {
 							final int status = connection.getResponseCode();
 							if (StatusChecker.this.list || (status < 200 || status >= 300)) {
 								if (!StatusChecker.this.verbose) {
-									System.out.println(s);
+									System.out.println(StatusChecker.this.decode ? URLDecoder.decode(s, java.nio.charset.Charset.defaultCharset().name()) : s);
 								} else {
-									System.out.println(String.format("%1$d\t%2$s", status, url.toExternalForm()));
+									System.out.println(String.format("%1$d\t%2$s", status, StatusChecker.this.decode ? URLDecoder.decode(url.toExternalForm(), java.nio.charset.Charset.defaultCharset().name()) : url.toExternalForm()));
 								}
 							}
 							connection.disconnect();
