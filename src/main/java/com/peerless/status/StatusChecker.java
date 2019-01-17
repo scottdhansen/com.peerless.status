@@ -22,34 +22,53 @@ import java.util.regex.Pattern;
 import javax.net.ssl.HttpsURLConnection;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PosixParser;
 
 public final class StatusChecker implements Runnable {
+	static private final Pattern pipeFilePattern = Pattern.compile("^(.+)\\|(.+)\\|(.+)\\|$");
+	static private final Options options;
+	static public final String defaultPipeFileName = "CAXY_MEDIA_DOC.PIPE";
+	static public final String defaultUrlBase = "https://docs.peerless-av.com/";
+	static public final int defaultTimeout = 300;
+	static public final int defaultMaxRetries = 3;
+	static public final int defaultThreads = 50;
+	static {
+		options = new Options();
+		options.addOption(new Option("f", "file", true, "The PIPE file to parse. (Defaults to CAXY_MEDIA_DOC.PIPE.)"));
+		options.addOption(new Option("b", "base", true, "The URL prefix used to resolve filenames from the PIPE file. (Defaults to https://docs.peerless-av.com/.)"));
+		options.addOption(new Option("t", "timeout", true, "The time in seconds before execution times out. (Defaults to 300.)"));
+		options.addOption(new Option("r", "retries", true, "The number of failed retries before a request is discarded. (Defaults to 3.)"));
+		options.addOption(new Option("p", "threads", true, "The number of threads to create. Set to 0 to use the automatic thread pool. (Defaults to 50.)"));
+		options.addOption(new Option("d", "decode", false, "Decodes percent-encoded paths in output."));
+		options.addOption(new Option("v", "verbose", false, "Prints detailed information on requests."));
+		options.addOption(new Option("l", "list", false, "Prints all results regardless of status."));
+		options.addOption(new Option("h", "help", false, "Prints this message."));
+	}
 	static public void main(final String[] args) {
-		final CommandLineParser parser = new PosixParser();
+		final CommandLineParser parser = new DefaultParser();
 		CommandLine cl = null;
 		try {
-			cl = parser.parse(OPTIONS, args);
+			cl = parser.parse(options, args);
 		} catch (final ParseException e) {
 			e.printStackTrace();
 			System.exit(100);
 		}
 		if (cl.hasOption("help")) {
-			new HelpFormatter().printHelp("java -jar *.jar <OPTIONS>", OPTIONS);
+			new HelpFormatter().printHelp("java -jar *.jar <OPTIONS>", options);
 			System.exit(0);
 		}
-		final File pipe = new File(cl.getOptionValue("file", DEFAULT_PIPE_FILE_NAME));
+		final File pipe = new File(cl.getOptionValue("file", defaultPipeFileName));
 		final HashSet<String> files = new HashSet<String>(4096);
 		BufferedReader in = null;
 		try {
 			in = new BufferedReader(new InputStreamReader(new FileInputStream(pipe)));
 			String line = in.readLine(); // Skip the first line of input
 			while ((line = in.readLine()) != null) {
-				final Matcher matcher = PIPE_FILE_PATTERN.matcher(line);
+				final Matcher matcher = pipeFilePattern.matcher(line);
 				if (matcher.matches()) {
 					files.add(matcher.group(3));
 				}
@@ -71,24 +90,7 @@ public final class StatusChecker implements Runnable {
 				}
 			}
 		}
-		new StatusChecker(files.toArray(new String[] {}), Integer.valueOf(cl.getOptionValue("timeout", Integer.toString(DEFAULT_TIMEOUT))), Integer.valueOf(cl.getOptionValue("retries", Integer.toString(DEFAULT_MAX_RETRIES))), Integer.valueOf(cl.getOptionValue("threads", Integer.toString(DEFAULT_THREADS))), cl.hasOption("decode"), cl.hasOption("verbose"), cl.hasOption("list")).run();
-	}
-	static private final Pattern PIPE_FILE_PATTERN = Pattern.compile("^(.+)\\|(.+)\\|(.+)\\|$");
-	static public final String DEFAULT_PIPE_FILE_NAME = "CAXY_MEDIA_DOC.PIPE";
-	static public final int DEFAULT_TIMEOUT = 300;
-	static public final int DEFAULT_MAX_RETRIES = 3;
-	static public final int DEFAULT_THREADS = 50;
-	static private final Options OPTIONS;
-	static {
-		OPTIONS = new Options();
-		OPTIONS.addOption(new Option("f", "file", true, "The PIPE file to parse. (Defaults to CAXY_MEDIA_DOC.PIPE.)"));
-		OPTIONS.addOption(new Option("t", "timeout", true, "The time in seconds before execution times out. (Defaults to 300.)"));
-		OPTIONS.addOption(new Option("r", "retries", true, "The number of failed retries before a request is discarded. (Defaults to 3.)"));
-		OPTIONS.addOption(new Option("p", "threads", true, "The number of threads to create. Set to 0 to use the automatic thread pool. (Defaults to 50.)"));
-		OPTIONS.addOption(new Option("d", "decode", false, "Decodes percent-encoded paths in output."));
-		OPTIONS.addOption(new Option("v", "verbose", false, "Prints detailed information on requests."));
-		OPTIONS.addOption(new Option("l", "list", false, "Prints all results regardless of status."));
-		OPTIONS.addOption(new Option("h", "help", false, "Prints this message."));
+		new StatusChecker(files.toArray(new String[] {}), Integer.valueOf(cl.getOptionValue("timeout", Integer.toString(defaultTimeout))), Integer.valueOf(cl.getOptionValue("retries", Integer.toString(defaultMaxRetries))), Integer.valueOf(cl.getOptionValue("threads", Integer.toString(defaultThreads))), cl.hasOption("decode"), cl.hasOption("verbose"), cl.hasOption("list")).run();
 	}
 	private final String[] files;
 	private final int timeout;
@@ -121,7 +123,7 @@ public final class StatusChecker implements Runnable {
 					StatusChecker.this.requestTotal++;
 					final long start = System.nanoTime();
 					try {
-						final URI uri = new URI("https", "www.peerless-av.com", "/product_files/" + s, null);
+						final URI uri = new URI(defaultUrlBase + s.replaceAll(" ", "%20"));
 						final URL url = uri.toURL();
 						final HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
 						try {
